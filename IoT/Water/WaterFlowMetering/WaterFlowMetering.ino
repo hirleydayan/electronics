@@ -1,6 +1,11 @@
-// reading liquid flow rate using Seeeduino and Water Flow Sensor from Seeedstudio.com
-// Code adapted by Charles Gantt from PC Fan RPM code written by Crenn @thebestcasescenario.com
-// http:/themakersworkbench.com http://thebestcasescenario.com http://seeedstudio.com
+/* 
+ * Reading liquid flow rate using Arduino UNO and Water Flow Sensor
+ * For additional information, please refer:
+ * http://www.seeedstudio.com/wiki/index.php?title=G1/2_Water_Flow_sensor
+ * http://www.protostack.com/blog/2010/09/external-interrupts-on-an-atmega168/
+ * http://thewanderingengineer.com/2014/08/11/arduino-pin-change-interrupts/
+ * 
+ */
 
 #include <LiquidCrystal.h>
 
