@@ -4,88 +4,120 @@
 
 #include <LiquidCrystal.h>
 
-volatile int NbTopsFan1;              // measuring the rising edges of
-// the signal for meter 1
-volatile int NbTopsFan2;              // measuring the rising edges of
-// the signal for meter 2
+volatile int nbTopsFan1 = 0;              // measuring the rising edges of the signal for meter 1
+volatile int nbTopsFan2 = 0;              // measuring the rising edges of the signal for meter 2
+volatile int m1State_Last = 0;
+volatile int m2State_Last = 0;
+
+char nbTopsFan1_Formated[5];
+char nbTopsFan2_Formated[5];
+
 LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
-int loopDelay=500;
+int loopDelay = 500;
 
-void setup() //
-{
-  Serial.begin(9600);                 // This is the setup function where
-  // the serial port is initialised,
-  initIO();
-  initInterrupt();
-  lcd.begin(16, 2);                   // start the library
-  lcd.setCursor(0, 0);
-  lcd.print("Flow (L/H)  v2.0");     // print a simple message
-  lcd.setCursor(0, 1);
-  lcd.print("M1:");
-  lcd.setCursor(8, 1);
-  lcd.print(",M2:");
+/*------------------------------------------------
+ * Initial Setup function
+ */
+void setup() {
+  Serial.begin(9600);                 // This is the setup function where the serial port is initialised,
+  
+  //Interrupt changes
+  byte pins[] = {A1, A2};
+  initPin(pins, INPUT_PULLUP);
+  initInt(pins);
+  //End
+
+  //LCD start
+  lcd.begin(16, 2);
+  //End 
+
+  //LCD Display strings
+  displayString(0,0,"Flow (L/H)  v3.0");
+  displayString(1,0,"M1:");
+  displayString(1,8,",M2:");
+  //End
 }
 
-void loop ()
-{
-  NbTopsFan1 = 0;                     // Set NbTops1 to 0 ready for calculations
-  NbTopsFan2 = 0;                     // Set NbTops2 to 0 ready for calculations
-  sei();                              // Enables interrupts
+/*------------------------------------------------
+ *  Loop function
+ */
+void loop () {
+  nbTopsFan1 = 0;                     // Set NbTops1 to 0 ready for calculations
+  nbTopsFan2 = 0;                     // Set NbTops2 to 0 ready for calculations
   delay (loopDelay);                  // Wait 1 second
-  cli();                              // Disable interrupts
-  printMeter(1, calculateFlow(NbTopsFan1));
-  printMeter(2, calculateFlow(NbTopsFan2));
-}
-
-void initIO() {
-  pinMode(A0, INPUT);                 // Pin A0 is input to which a switch is connected
-  digitalWrite(A0, HIGH);             // Configure internal pull-up resistor
-  pinMode(A1, INPUT);                 // Pin A1 is input to which a switch is connected
-  digitalWrite(A1, HIGH);             // Configure internal pull-up resistor
-  pinMode(A2, INPUT);                 // Pin A2 is input to which a switch is connected
-  digitalWrite(A2, HIGH);             // Configure internal pull-up resistor
-}
-
-void initInterrupt() {
-  cli();                              // switch interrupts off while messing with their settings
-  PCICR = 0x02;                       // Enable PCINT1 interrupt
-  PCMSK1 = 0b00000111;
-  sei();                              // turn interrupts back on
+  sprintf(nbTopsFan1_Formated, "%04d", calculateFlow(nbTopsFan1));
+  sprintf(nbTopsFan2_Formated, "%04d", calculateFlow(nbTopsFan2));
+  if (nbTopsFan1 > 0 || nbTopsFan2 > 0) {
+    Serial.print ("Sensors (L/hour) => M1: ");
+    Serial.print (nbTopsFan1_Formated); // Prints the number calculated above
+    Serial.print (" ,M2: ");
+    Serial.print (nbTopsFan2_Formated); // Prints the number calculated above
+    Serial.print ("\r\n");              // Prints "L/hour" and returns a  new line
+  }
+  displayString(1, 3,  nbTopsFan1_Formated);
+  displayString(1, 12, nbTopsFan2_Formated);
 }
 
 
-ISR(PCINT1_vect) {                    // Interrupt service routine.
-  // Every single PCINT8..14 (=ADC0..5) change
-  // will generate an interrupt: but this will
-  // always be the same interrupt routine
-  if (digitalRead(A0) == 0) NbTopsFan1++;
-  if (digitalRead(A1) == 0) NbTopsFan2++;
+/*------------------------------------------------
+ * Display support function
+ * line: line to print
+ * column: column to print
+ * str: string to print
+ */
+void displayString(int line, int column, String str) {
+  lcd.setCursor(column, line);
+  lcd.print(str);
 }
 
-int calculateFlow(int NbTopsFan) {
-  int Calc;
-  Calc = (NbTopsFan * 60 / 7.5);      // (Pulse frequency x 60) / 7.5Q, = flow rate in L/hour
-  return Calc;
+/*------------------------------------------------
+ * Calcule flow function
+ * frequency: line to print
+ */ 
+int calculateFlow(int frequency) {    
+  return frequency * 60 / 7.5;
 }
 
-void printMeter(int meter, int value) {
-  static char formatedValue[5];
-  sprintf(formatedValue, "%04d", value);
-  Serial.print ("Value: ");
-  Serial.print (formatedValue);     // Prints the number calculated above
-  Serial.print (" L/hour\r\n");     // Prints "L/hour" and returns a  new line
-  switch (meter) {
-    case 1:
-      lcd.setCursor(3, 1);
-      lcd.print(formatedValue);
-      break;
-    case 2:
-      lcd.setCursor(12, 1);
-      lcd.print(formatedValue);
-      break;
-    default:
-      break;
+/*------------------------------------------------
+ * Initiate Pins
+ * pins: array of desired pins
+ * state: desired state
+ */
+void initPin(byte pins[], int state) {
+  for (int n = 0; n <= sizeof(pins); n++) {
+    pinMode(pins[n], state);                 // Pin A0 is input to which a switch is connected
+    //digitalWrite(pins[n], state);             // Configure internal pull-up resistor
   }
 }
+
+/*------------------------------------------------
+ * Initiate interrupting for desired pins
+ * pins: array of desired pins
+ */
+void initInt(byte pins[]) {
+  for (int n = 0; n <= sizeof(pins); n++) {
+    *digitalPinToPCMSK(pins[n]) |= bit (digitalPinToPCMSKbit(pins[n]));  // enable pin
+    PCIFR  |= bit (digitalPinToPCICRbit(pins[n])); // clear any outstanding interrupt
+    PCICR  |= bit (digitalPinToPCICRbit(pins[n])); // enable interrupt for the group
+  }
+}
+
+/*------------------------------------------------
+ * Function for dealing with interruption on 
+ * port PORT C
+ */
+ISR(PCINT1_vect) {
+  int m1State = digitalRead(A1);
+  if (m1State != m1State_Last) {
+    m1State_Last = m1State;
+    nbTopsFan1++;
+  }
+  int m2State = digitalRead(A2);
+  if (m2State != m2State_Last) {
+    m2State_Last = m2State;
+    nbTopsFan2++;
+  }
+}
+
 
